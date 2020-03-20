@@ -97,6 +97,8 @@ class Rolling_cor(Feature):
 
             item_id_r28_w91 = rolling_cor(X_r28, df[f"item_id_lag_{LAG}_rmean_28"])
             id_dept_r28_w91 = rolling_cor(X_r28, df[f"dept_id_lag_{LAG}_rmean_28"])
+            id_store_r28_w91 = rolling_cor(X_r28, df[f"store_id_lag_{LAG}_rmean_28"])
+            id_store_dept_r28_w91 = rolling_cor(X_r28, df[f"store_id_dept_id_lag_{LAG}_rmean_28"])
 
             for i, d in enumerate(df["d"].values):
                 autocor_data["id"].append(id_)
@@ -105,15 +107,51 @@ class Rolling_cor(Feature):
                 autocor_data["id_autocor_r7_d28_w91"].append(autocor_r7_d28_w91[i])
                 autocor_data["id_autocor_r28_d364_w91"].append(autocor_r28_d364_w91[i])
 
-                autocor_data["id_item_r28_w91"].append(autocor_r7_d28_w91[i])
-                autocor_data["id_dept_r28_w91"].append(autocor_r28_d364_w91[i])
-        
+                autocor_data["id_item_r28_w91"].append(item_id_r28_w91[i])
+                autocor_data["id_dept_r28_w91"].append(id_dept_r28_w91[i])
+                autocor_data["id_store_r28_w91"].append(id_store_r28_w91[i])
+                autocor_data["id_store_dept_r28_w91"].append(id_store_dept_r28_w91[i])
+
         autocor_data = pd.DataFrame(dict(autocor_data))
         datas.append(data_df[["id", "d"]].merge(autocor_data,
                                                 on=["id", "d"],
                                                 how="left")\
                                          .drop(["id", "d"], axis=1)\
+                                         .astype(np.float32))    
+        del autocor_data
+        collect()
+        
+        autocor_data = defaultdict(lambda : [])
+        for item_id_, df in tqdm(data_df.groupby("item_id"), total=data_df["item_id"].nunique()):
+            df = df.drop_duplicates(["item_id", "d"])
+            X = df[f"id_lag_{LAG}_rmean_1"]
+            X_r7 = df[f"id_lag_{LAG}_rmean_7"]
+            X_r28 = df[f"id_lag_{LAG}_rmean_28"]
+
+            X_1y_r28 = df[f"id_lag_{LAG}_rmean_28"].shift(364)
+
+            autocor_r1_d7_w91 = rolling_cor(X, X.shift(7), 91)
+            autocor_r7_d28_w91 = rolling_cor(X_r7, X_r7.shift(28), 91)
+            autocor_r28_d364_w91 = rolling_cor(X_r28, X_r28.shift(364), 91)
+
+            id_dept_r28_w91 = rolling_cor(X_r28, df[f"dept_id_lag_{LAG}_rmean_28"])
+
+            for i, d in enumerate(df["d"].values):
+                autocor_data["item_id"].append(item_id_)
+                autocor_data["d"].append(d)
+                autocor_data["item_id_autocor_r1_d7_w91"].append(autocor_r1_d7_w91[i])
+                autocor_data["item_id_autocor_r7_d28_w91"].append(autocor_r7_d28_w91[i])
+                autocor_data["item_id_autocor_r28_d364_w91"].append(autocor_r28_d364_w91[i])
+                autocor_data["item_id_dept_r28_w91"].append(id_dept_r28_w91[i])
+
+        autocor_data = pd.DataFrame(dict(autocor_data))
+        datas.append(data_df[["item_id", "d"]].merge(autocor_data,
+                                                on=["item_id", "d"],
+                                                how="left")\
+                                         .drop(["item_id", "d"], axis=1)\
                                          .astype(np.float32))
+        
+
         del autocor_data
         collect()
         self.data = pd.concat(datas, axis=1)

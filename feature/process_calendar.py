@@ -16,6 +16,12 @@ from tqdm import tqdm
 from feature import Feature, get_arguments, generate_features
 Feature.dir = "../processed"
 
+from scipy.stats import ttest_ind_from_stats
+
+def get_p(m1, s1, n1, m2, s2, n2):
+    return ttest_ind_from_stats(m1, s1, n1, m2, s2, n2, equal_var=False)[1]
+
+
 class Calendar(Feature):
     def create_features(self):
         datas = []
@@ -43,12 +49,24 @@ class Calendar(Feature):
                                    .drop("d", axis=1))
         
         # SNAPの情報を利用
-        snap_df = self.make_snap(calendar_df)
+        snap_df = self.make_snap(calendar_df)        
         datas.append(data_df[["d", "state_id"]].merge(snap_df,
                                                       on=["d", "state_id"],
                                                       how="left")
                                                .drop(["d", "state_id"], axis=1))
-
+        tmp_df = data_df.merge(snap_df,
+                               on=["d", "state_id"],
+                               how="left")
+        pivot = tmp_df.query("target >= 0").pivot_table(columns="snap",
+                                                        index="item_id",
+                                                        values="target",
+                                                        aggfunc=["mean", "std", "count"])
+        pivot["snap_ttest_pvalue"] = np.vectorize(get_p)(pivot[("mean", 0)], pivot[("std", 0)], pivot[("count", 0)], pivot[("mean", 1)], pivot[("std", 1)], pivot[("count", 1)])                                                       
+        tmp_df = tmp_df.merge(pivot.reset_index()[["item_id", "snap_ttest_pvalue"]],
+                            on="item_id",
+                            how="left")
+        tmp_df = tmp_df.rename({tmp_df.columns[-1]: 'snap_ttest_pvalue'}, axis=1)
+        datas[-1]["snap_ttest_pvalue"] = np.log10(tmp_df["snap_ttest_pvalue"].values).astype(np.float32)
         self.data = pd.concat(datas, axis=1)
 
     def search_last(self, X):

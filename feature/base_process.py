@@ -59,15 +59,19 @@ if __name__ == "__main__":
     calendar_df["date"] = pd.to_datetime(calendar_df["date"])
     calendar_df["day"] = calendar_df["date"].dt.day
     calendar_df["d"] = calendar_df["d"].apply(lambda x: int(x[2:])).astype(np.int16)
-    data_df = data_df.merge(calendar_df[["d", "month", "day"]],
+    data_df = data_df.merge(calendar_df[["d", "month", "day", "wm_yr_wk"]],
                             on="d",
                             how="left")
     
-    # 商品が初めて売れるまでのデータを除く
+    # 商品に値段がついてないデータを除く
     # 年1の閉店日であるクリスマスのデータを除く
-    data_df["first_appear"] = data_df["id"].map(data_df.query("target > 0").groupby("id")["d"].min().to_dict())
-    data_df = data_df.query("d >= first_appear")
-    data_df = data_df.query("not (month == 12 and day == 25)")
-
-    pd.to_pickle(data_df[['id', 'item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'target', 'd']].reset_index(drop=True), "../processed/base_data.pickle")
+    price_df["store_id"] = price_df["store_id"].map(store_id_map)
+    price_df["item_id"] = price_df["item_id"].map(item_id_map)
+    data_df = data_df.merge(price_df,
+                            on=["item_id", "store_id", "wm_yr_wk"],
+                            how="left")
+    data_df = data_df[~data_df["sell_price"].isna()]
+    data_df = data_df.query("not (month == 12 and day == 25)").reset_index(drop=True)
+    data_df["first_appear"] = data_df.groupby("id")["d"].transform("min")
+    pd.to_pickle(data_df[['id', 'item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'target', 'd']], "../processed/base_data.pickle")
     generate_features(globals(), args.force)

@@ -39,7 +39,7 @@ class Rolling_id(Feature):
         feat[f"id_lag_1y_rmean_91"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(364).rolling(91).mean())
 
         feat[f"id_lag_{LAG}_rmean_28_per_1y"] = feat[f"id_lag_{LAG}_rmean_28"] / data_df.groupby("id")["target"].transform(lambda x: x.shift(364 + 28).rolling(28).mean())
-
+            
         datas.append(feat.copy().astype(np.float32))
 
         # item_id
@@ -74,7 +74,7 @@ class Rolling_id(Feature):
             feat = feat.sort_values(by="d")
 
             feat[f"{pf}_lag_{LAG}_rmean_{28}"] = feat.groupby(id_col)["target"].transform(lambda x: x.shift(LAG).rolling(28).mean())
-            feat[f"{pf}_id_lag_{LAG}_rmean_{91}"] = feat.groupby(id_col)["target"].transform(lambda x: x.shift(LAG).rolling(91).mean())
+            feat[f"{pf}_lag_{LAG}_rmean_{91}"] = feat.groupby(id_col)["target"].transform(lambda x: x.shift(LAG).rolling(91).mean())
             datas.append(data_df[id_col + ["d"]].merge(feat.drop("target", axis=1),
                                                         on= id_col + ["d"],
                                                         how="left").drop(id_col + ["d"], axis=1).astype(np.float32))
