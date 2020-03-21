@@ -42,10 +42,21 @@ class Rolling_id(Feature):
             
         datas.append(feat.copy().astype(np.float32))
 
+        data_df["dd7"] = data_df["d"]//7
+        data_df["dp7"] = data_df["d"]%7
+        pivot = data_df.pivot_table(columns=["id", "dp7"],
+                                    index="dd7",
+                                    values="target",
+                                    aggfunc="mean").shift(-(-LAG//7))
+        res = pivot.rolling(4).mean().unstack().reset_index().rename({0: f"id_lag_{-(-LAG//7)}w_rmean_4w"}, axis=1)
+        datas.append(data_df[["id", "dp7", "dd7"]].merge(res, on=["id", "dp7", "dd7"], how="left").drop(["id", "dp7", "dd7"], axis=1).astype(np.float32))
+        res = pivot.rolling(12).mean().unstack().reset_index().rename({0: f"id_lag_{-(-LAG//7)}w_rmean_12w"}, axis=1)
+        datas.append(data_df[["id", "dp7", "dd7"]].merge(res, on=["id", "dp7", "dd7"], how="left").drop(["id", "dp7", "dd7"], axis=1).astype(np.float32))
+
         # item_id
         feat = pd.DataFrame()
         count_ = data_df.groupby(["item_id", "d"])["id"].nunique().reset_index()
-        sum_ = data_df.groupby(["item_id", "d"])["target"].nunique().reset_index()
+        sum_ = data_df.groupby(["item_id", "d"])["target"].sum().reset_index()
         feat["item_id"] = count_["item_id"]
         feat["d"] = count_["d"]
         feat["target"] = sum_["target"] / count_["id"]
@@ -66,7 +77,7 @@ class Rolling_id(Feature):
             pf = "_".join(id_col)
             feat = pd.DataFrame()
             count_ = data_df.groupby(id_col + ["d"])["id"].nunique().reset_index()
-            sum_ = data_df.groupby(id_col + ["d"])["target"].nunique().reset_index()
+            sum_ = data_df.groupby(id_col + ["d"])["target"].sum().reset_index()
             for col in id_col:
                 feat[col] = count_[col]
             feat["d"] = count_["d"]

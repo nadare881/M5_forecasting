@@ -45,11 +45,11 @@ if __name__ == "__main__":
     for col in tqdm(calendar_df["d"].unique()):
         if (int(col[2:]) <= 1913):
             tmp_df = raw_train_df[list(raw_train_df.columns[:6]) + [col]].rename({col:"target"}, axis=1)
-            tmp_df["target"] = tmp_df["target"].astype(np.int16)
+            tmp_df["target"] = tmp_df["target"].astype(np.int64)
         else:
             tmp_df = raw_train_df[list(raw_train_df.columns[:6])]
             tmp_df["target"] = -1
-            tmp_df["target"] = tmp_df["target"].astype(np.int16)
+            tmp_df["target"] = tmp_df["target"].astype(np.int64)
         tmp_df["d"] = int(col[2:])
         tmp_df["d"] = tmp_df["d"].astype(np.int16)
         data.append(tmp_df)
