@@ -25,7 +25,7 @@ from collections import deque
 from math import sqrt
 LAG = 28
 
-def rolling_fit(X, Y, window=28, th=10):
+def rolling_fit(X, Y, window=28, th=28, rolling=0):
     
     def var(sum_, sum2, N):
         return max(sum2/N - (sum_/N)**2, 0)
@@ -47,7 +47,8 @@ def rolling_fit(X, Y, window=28, th=10):
     N = 0
     start = 0
     for i in range(len(X)):
-        x, y = X[i], Y[i]
+        ox, y = X[i], Y[i]
+        x = ox - LAG - rolling/2
         if pd.isna(x) or pd.isna(y):
             res["slope"].append(np.NaN)
             res["pred"].append(np.NaN)
@@ -75,10 +76,10 @@ def rolling_fit(X, Y, window=28, th=10):
             VX = var(X_sum, X_sum2, N)
             VY = var(Y_sum, Y_sum2, N)
             covXY = (var(XY_sum, XY_sum2, N) - VX - VY)/2
-            slope = covXY/VX
+            slope = covXY/(VX+1e-18)
             intercept = Y_sum/N - slope*X_sum/N
-            pred = (x+LAG)*slope + intercept
-            r = covXY / np.sqrt(VX+1e-9) / np.sqrt(VY+1e-9)
+            pred = ox*slope + intercept
+            r = covXY / np.sqrt(VX+1e-18) / np.sqrt(VY+1e-18)
             res["slope"].append(slope)
             res["pred"].append(pred)
             res["R"].append(r)
@@ -93,45 +94,38 @@ class Rolling_linfit(Feature):
         self.add_prefix_name(f"LAG_{LAG}")
         datas = []
         feat = pd.DataFrame()
+        data_df["all_id"] = 0
 
-        linfit_data = defaultdict(lambda : [])
-        for id_, df in tqdm(data_df.groupby("id"), total=data_df["id"].nunique()):
-            X = df["d"].shift(LAG)
-            Y = df[f"id_lag_{LAG}_rmean_1"]
-            Y2 = df[f"id_lag_{LAG}_rmean_91"]
-            
-            lfit_r1_w28 = rolling_fit(X, Y2, 28)
-            lfit_r1_w91 = rolling_fit(X, Y, 91)
-            lfit_r1_w364 = rolling_fit(X, Y, 364)
-            lfit_r1_all = rolling_fit(X, Y, 10000)
+        
+        for cols in [["all_id"], ["item_id"], ["store_id", "dept_id"]]:
+            linfit_data = defaultdict(lambda : [])
+            name = "_".join(cols)
+            for _, df in tqdm(data_df.groupby(cols)):
+                ids = []
+                for c in cols:
+                    ids.append(df[c].values[0])
+                df = df.drop_duplicates(["d"] + cols)
+                X = df["d"].shift(LAG)
+                Y2 = df[f"{name}_lag_{LAG}_rmean_1"]
+                lfit_r1_w28 = rolling_fit(X, Y2, 91)
 
-            for i, d in enumerate(df["d"].values):
-                linfit_data["id"].append(id_)
-                linfit_data["d"].append(d)
-                linfit_data["id_linfit_w28_slope"].append(lfit_r1_w28["slope"][i])
-                linfit_data["id_linfit_w28_pred"].append(lfit_r1_w28["pred"][i])
-                linfit_data["id_linfit_w28_r"].append(lfit_r1_w28["R"][i])
+                for i, d in enumerate(df["d"].values):
+                    for id_, col in zip(ids, cols):
+                        linfit_data[col].append(id_)
+                    linfit_data["d"].append(d)
 
-                linfit_data["id_linfit_w91_slope"].append(lfit_r1_w91["slope"][i])
-                linfit_data["id_linfit_w91_pred"].append(lfit_r1_w91["pred"][i])
-                linfit_data["id_linfit_w91_r"].append(lfit_r1_w91["R"][i])
+                    linfit_data[f"{name}_linfit_w91_slope"].append(lfit_r1_w28["slope"][i])
+                    linfit_data[f"{name}_linfit_w91_pred"].append(lfit_r1_w28["pred"][i])
+                    linfit_data[f"{name}_linfit_w91_r"].append(lfit_r1_w28["R"][i])
 
-                linfit_data["id_linfit_w364_slope"].append(lfit_r1_w364["slope"][i])
-                linfit_data["id_linfit_w364_pred"].append(lfit_r1_w364["pred"][i])
-                linfit_data["id_linfit_w364_r"].append(lfit_r1_w364["R"][i])
-
-                linfit_data["id_linfit_wall_slope"].append(lfit_r1_all["slope"][i])
-                linfit_data["id_linfit_wall_pred"].append(lfit_r1_all["pred"][i])
-                linfit_data["id_linfit_wall_r"].append(lfit_r1_all["R"][i])
-        linfit_data = pd.DataFrame(dict(linfit_data))
-        datas.append(data_df[["id", "d"]].merge(linfit_data,
-                                                on=["id", "d"],
-                                                how="left")\
-                                         .drop(["id", "d"], axis=1)\
-                                         .astype(np.float32))
-
-        del linfit_data
-        collect()
+            linfit_data = pd.DataFrame(dict(linfit_data))
+            datas.append(data_df[["d"] + cols].merge(linfit_data,
+                                                    on=["d"] + cols,
+                                                    how="left")\
+                                            .drop(["d"] + cols, axis=1)\
+                                            .astype(np.float16))
+            del linfit_data
+            collect()
         self.data = pd.concat(datas, axis=1)
 
 if __name__ == "__main__":

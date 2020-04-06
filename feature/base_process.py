@@ -20,7 +20,7 @@ class Base(Feature):
         feat = pd.DataFrame()
         feat["first_appear"] = data_df["first_appear"].replace(1, np.NaN).astype(np.float32)
         feat["since_appear"] = (data_df["d"] - data_df["first_appear"]).astype(np.float32)
-        self.data = feat
+        self.data = feat[["since_appear"]]
 
 if __name__ == "__main__":
     args = get_arguments()
@@ -73,5 +73,6 @@ if __name__ == "__main__":
     data_df = data_df[~data_df["sell_price"].isna()]
     data_df = data_df.query("not (month == 12 and day == 25)").reset_index(drop=True)
     data_df["first_appear"] = data_df.groupby("id")["d"].transform("min")
+
     pd.to_pickle(data_df[['id', 'item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'target', 'd']], "../processed/base_data.pickle")
     generate_features(globals(), args.force)

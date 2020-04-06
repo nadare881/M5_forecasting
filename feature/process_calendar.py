@@ -43,17 +43,20 @@ class Calendar(Feature):
         calendar_df["date"] = pd.to_datetime(calendar_df["date"])
         calendar_df["day"] = calendar_df["date"].dt.day
         calendar_df["dayofyear"] = calendar_df["date"].dt.dayofyear
+        calendar_df["weekofmonth"] = calendar_df["day"].apply(lambda x: x//7)
         calendar_df["d"] = calendar_df["d"].apply(lambda x: int(x[2:])).astype(np.int16)
         calendar_df = self.create_calendar_feature(calendar_df)
 
         # マージ
-        calendar_merge_col = ['wday', 'month', 'year', 'd', 'day', 'dayofyear', 'last_Sporting_distance',
+        calendar_merge_col = ['wday', 'month', 'year', 'd', 'day', 'dayofyear', "weekofmonth", 'last_Sporting_distance',
                             'last_Cultural_distance', 'last_National_distance',
                             'last_Religious_distance', 'next_Sporting_distance',
                             'next_Cultural_distance', 'next_National_distance',
                             'next_Religious_distance', 'nearest_Cultural_distance',
                             'nearest_National_distance', 'NBA_duration']
-        datas.append(data_df[["d"]].merge(calendar_df[calendar_merge_col],  
+        name_col = ['last_Sporting_name', 'last_Cultural_name', 'last_National_name', 'last_Religious_name', 'next_Sporting_name',
+                    'next_Cultural_name', 'next_National_name', 'next_Religious_name', 'nearest_Cultural_name', 'nearest_National_name']
+        datas.append(data_df[["d"]].merge(calendar_df[calendar_merge_col + name_col],  
                                           on="d",
                                           how="left")
                                    .drop("d", axis=1))
@@ -65,30 +68,73 @@ class Calendar(Feature):
 
         dept_merge_col = []
 
-        for d in ["last", "next"]:
-            for event in ["National", "Cultural", "Religious"]:
-                dept_event_data = calendar_data.query(f"{d}_{event}_distance < 7 and target >= 0")\
-                                                .groupby(["dept_id", f"{d}_{event}_name"])["target"]\
-                                                .agg(["mean", "std", "count"])
-                dept_event_data.columns = [f"{d}_{event}_dept_" + c for c in dept_event_data.columns]
-                dept_event_data = dept_event_data.reset_index().merge(dept_data.reset_index(),
-                                                                            on="dept_id",
-                                                                            how="left")
-                dept_event_data[f"{d}_{event}_dept_mean_ratio"] = dept_event_data[f"{d}_{event}_dept_mean"] / dept_event_data["mean"]
-                dept_event_data[f"{d}_{event}_dept_p_value"] = np.log10(np.vectorize(get_p)(dept_event_data[f"{d}_{event}_dept_mean"],
-                                                                                            dept_event_data[f"{d}_{event}_dept_std"],
-                                                                                            dept_event_data[f"{d}_{event}_dept_count"],
-                                                                                            dept_event_data["mean"],
-                                                                                            dept_event_data["std"],
-                                                                                            dept_event_data["count"]))
-                calendar_data = calendar_data.merge(dept_event_data[["dept_id", f"{d}_{event}_name", f"{d}_{event}_dept_mean_ratio", f"{d}_{event}_dept_p_value"]],
-                                                    on=["dept_id", f"{d}_{event}_name"],
-                                                    how="left")
-                calendar_data[f"{d}_{event}_name"] = calendar_data[f"{d}_{event}_dept_mean_ratio"].astype(np.float32)
-                calendar_data[f"{d}_{event}_dept_p_value"] = calendar_data[f"{d}_{event}_dept_p_value"].astype(np.float32)
-                dept_merge_col.append(f"{d}_{event}_dept_mean_ratio")
-                dept_merge_col.append(f"{d}_{event}_dept_p_value")
-        datas.append(calendar_data[dept_merge_col])         
+        res = calendar_data.pivot_table(columns=["id", "month", "day"],
+                                        index="year",
+                                        values="target",
+                                        aggfunc="first")\
+                            .shift(1)\
+                            .unstack()\
+                            .reset_index()\
+                            .rename({0: "id_lastyear_daymonth"}, axis=1)
+        calendar_data = calendar_data.merge(res,  
+                                            on=["year", "id", "month", "day"],
+                                            how="left")
+        calendar_data["id_lastyear_daymonth"] = calendar_data["id_lastyear_daymonth"].astype(np.float16)    
+        dept_merge_col.append("id_lastyear_daymonth")
+
+        pivot = calendar_data.pivot_table(columns=["id", "month", "weekofmonth", "wday"],
+                                        index="year",
+                                        values="target",
+                                        aggfunc="first")\
+                            .shift(1)
+        res = pivot.unstack()\
+                   .reset_index()\
+                   .rename({0: "id_lastyear_wdaywmonth"}, axis=1) 
+        calendar_data = calendar_data.merge(res,  
+                                            on=["year", "id", "month", "weekofmonth", "wday"],
+                                            how="left")
+        dept_merge_col.append("id_lastyear_wdaywmonth")
+        calendar_data["all_id"] = 0
+        for cols in [["id"], ["item_id"]]:
+            name = "_".join(cols) + "_lastyear_wdaywmonth_cummean"
+            pivot = calendar_data.pivot_table(columns= cols + ["month", "weekofmonth", "wday"],
+                                                    index="year",
+                                                    values="target",
+                                                    aggfunc="sum")\
+                                        .shift(1)
+            pivot = pivot.cumsum() / (~pivot.isna()).cumsum()
+            pivot = pivot.fillna(method="ffill")
+            res = pivot.unstack()\
+                    .reset_index()\
+                    .rename({0: name}, axis=1)
+            calendar_data = calendar_data.merge(res,  
+                                                on=["year", "month", "weekofmonth", "wday"] + cols,
+                                                how="left")        
+            calendar_data[name] = calendar_data[name].astype(np.float32)
+            dept_merge_col.append(name)
+        
+        calendar_data["cum_scaled_target"] = calendar_data.groupby("id")["target"]\
+                                                          .transform(lambda x: (x - (x.cumsum() / (np.arange(len(x))+1)))
+                                                                                / (np.sqrt(((x**2).cumsum() / np.arange(len(x))+1) - (x.cumsum() / (np.arange(len(x))+1))**2)+1e-18))
+        for cols in [["store_id"], ["dept_id"], ["all_id"], ["store_id", "dept_id"]]:
+            name = "_".join(cols) + "_lastyear_wdaywmonth_cummean"
+            pivot = calendar_data.pivot_table(columns= cols + ["month", "weekofmonth", "wday"],
+                                                    index="year",
+                                                    values="cum_scaled_target",
+                                                    aggfunc="mean")\
+                                        .shift(1)
+            pivot = pivot.cumsum() / (~pivot.isna()).cumsum()
+            pivot = pivot.fillna(method="ffill")
+            res = pivot.unstack()\
+                    .reset_index()\
+                    .rename({0: name}, axis=1)
+            calendar_data = calendar_data.merge(res,  
+                                                on=["year", "month", "weekofmonth", "wday"] + cols,
+                                                how="left")        
+            calendar_data[name] = calendar_data[name].astype(np.float32)
+            dept_merge_col.append(name)
+        datas.append(calendar_data[dept_merge_col])
+         
         
         # SNAPの情報を利用
         snap_df = self.make_snap(calendar_df)        
@@ -96,17 +142,23 @@ class Calendar(Feature):
                                                       on=["d", "state_id"],
                                                       how="left")
                                                .drop(["d", "state_id"], axis=1))
-        tmp_df = data_df.merge(snap_df,
+        tmp_df = calendar_data.merge(snap_df,
                                on=["d", "state_id"],
                                how="left")
         pivot = tmp_df.query("target >= 0").pivot_table(columns="snap",
-                                                        index="item_id",
+                                                        index=["item_id", "year"],
                                                         values="target",
-                                                        aggfunc=["mean", "std", "count"])
-        pivot["snap_ttest_pvalue"] = np.vectorize(get_p)(pivot[("mean", 0)], pivot[("std", 0)], pivot[("count", 0)], pivot[("mean", 1)], pivot[("std", 1)], pivot[("count", 1)])                                                       
-        tmp_df = tmp_df.merge(pivot.reset_index()[["item_id", "snap_ttest_pvalue"]],
-                            on="item_id",
-                            how="left")
+                                                        aggfunc=["mean", "std", "count"])\
+                                        .groupby("item_id")\
+                                        .shift(1)
+        pivot.columns = ["_".join(map(str, col)) for col in pivot.columns]
+        pivot.loc[:, ["mean_0", "mean_1", "std_0", "std_1"]] = pivot.groupby("item_id")[["mean_0", "mean_1", "std_0", "std_1"]].transform(lambda x: x.cumsum() / np.arange(len(x)))
+        pivot.loc[:, ["count_0", "count_1"]] = pivot.groupby("item_id")[["count_0", "count_1"]].transform(lambda x: x.cumsum())
+        pivot = pivot[~pivot.isna().any(axis=1)]
+        pivot["snap_ttest_pvalue"] = np.vectorize(get_p)(pivot["mean_0"], pivot["std_0"]+1e-9, pivot["count_0"], pivot["mean_1"], pivot["std_1"]+1e-9, pivot["count_1"])                                                  
+        tmp_df = tmp_df.merge(pivot.reset_index()[["item_id", "year", "snap_ttest_pvalue"]],
+                              on=["item_id", "year"],
+                              how="left")
         tmp_df = tmp_df.rename({tmp_df.columns[-1]: 'snap_ttest_pvalue'}, axis=1)
         datas[-1]["snap_ttest_pvalue"] = np.log10(tmp_df["snap_ttest_pvalue"].values).astype(np.float32)
         self.data = pd.concat(datas, axis=1)
@@ -185,7 +237,7 @@ class Calendar(Feature):
         dist_col = calendar_df.filter(regex="distance").columns
         calendar_df.loc[:, dist_col] = calendar_df.loc[:, dist_col].astype(np.int16)
 
-        calendar_df[["wday", "month", "year", 'day', 'dayofyear']] = calendar_df[["wday", "month", "year", 'day', 'dayofyear']].astype(np.uint16)
+        calendar_df[["wday", "month", "year", 'day', 'dayofyear', "weekofmonth"]] = calendar_df[["wday", "month", "year", 'day', 'dayofyear', "weekofmonth"]].astype(np.uint16)
         return calendar_df
     
     def make_snap(self, calendar_df):
