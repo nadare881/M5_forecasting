@@ -81,6 +81,7 @@ class Rolling_id(Feature):
         data_df["cum_scaled_target"] = data_df.groupby("id")["target"]\
                                               .transform(lambda x: (x - (x.cumsum() / (~x.isna()).cumsum()))
                                                                     / (np.sqrt(((x**2).cumsum() / ((~x.isna()).cumsum()) - (x.cumsum() / ((~x.isna()).cumsum()))**2)+1e-9))).astype(np.float32)
+        #data_df["cum_scaled_target"] = data_df.groupby("id")["target"].transform(lambda x: (x - x.mean())/(x.std()+1e-9))
         for id_col in [["all_id"], ["store_id"], ["dept_id"], ["store_id", "dept_id"]]:
             pf = "_".join(id_col)
             feat = data_df.groupby(id_col + ["d"])["cum_scaled_target"].mean().reset_index().rename({0: "cum_scaled_target"}, axis=1)

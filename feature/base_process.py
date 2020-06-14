@@ -25,7 +25,7 @@ class Base(Feature):
 if __name__ == "__main__":
     args = get_arguments()
     calendar_df = pd.read_csv("../input/m5-forecasting-accuracy/calendar.csv")
-    raw_train_df = pd.read_csv("../input/m5-forecasting-accuracy/sales_train_validation.csv")
+    raw_train_df = pd.read_csv("../input/m5-forecasting-accuracy/sales_train_evaluation.csv")
     price_df = pd.read_csv("../input/m5-forecasting-accuracy/sell_prices.csv")
     smpsb_df = pd.read_csv("../input/m5-forecasting-accuracy/sample_submission.csv")
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # 縦にデータを繋げる
     data = []
     for col in tqdm(calendar_df["d"].unique()):
-        if (int(col[2:]) <= 1913):
+        if (int(col[2:]) <= 1941):
             tmp_df = raw_train_df[list(raw_train_df.columns[:6]) + [col]].rename({col:"target"}, axis=1)
             tmp_df["target"] = tmp_df["target"].astype(np.int64)
         else:

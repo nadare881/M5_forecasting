@@ -56,7 +56,7 @@ class Calendar(Feature):
                             'nearest_National_distance', 'NBA_duration']
         name_col = ['last_Sporting_name', 'last_Cultural_name', 'last_National_name', 'last_Religious_name', 'next_Sporting_name',
                     'next_Cultural_name', 'next_National_name', 'next_Religious_name', 'nearest_Cultural_name', 'nearest_National_name']
-        datas.append(data_df[["d"]].merge(calendar_df[calendar_merge_col + name_col],  
+        datas.append(data_df[["d"]].merge(calendar_df[calendar_merge_col],  
                                           on="d",
                                           how="left")
                                    .drop("d", axis=1))
