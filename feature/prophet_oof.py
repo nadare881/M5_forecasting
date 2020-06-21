@@ -26,7 +26,7 @@ logging.getLogger('fbprophet').setLevel(logging.WARNING)
 
 Feature.dir = "../processed"
 
-LAG = 28
+LAG = 14
 class Prophet_id_oof(Feature):
     def create_features(self):
         data_df = pd.read_pickle("../processed/base_data.pickle")
@@ -77,7 +77,7 @@ class Prophet_level_oof(Feature):
         raw_train_df = pd.read_csv("../input/m5-forecasting-accuracy/sales_train_evaluation.csv")
 
         data_df = pd.read_pickle("../processed/base_data.pickle")
-        prophet_df = pd.read_csv("../prophets/lag28_level9_prophet.csv")
+        prophet_df = pd.read_csv(f"../prophets/lag{LAG}_level9_prophet.csv")
         prophet_df["id"] = prophet_df["id"] + "_evaluation"
         level_df = pd.read_pickle("../prophets/level1_9.pkl")
 
