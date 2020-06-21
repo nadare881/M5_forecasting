@@ -35,13 +35,13 @@ if __name__ == "__main__":
     val_data_df2["target"] = val_data_df2["target"].fillna(0)
 
     year = 6
-    dev_data = lgb.Dataset(data_df.query(f"{1885 - 365*year} <= d and d <= 1885").drop(drop_col, axis=1), label=data_df.query(f"{1885 - 365*year} <= d and d <= {1885}")["target"])#, weight=data_df.query("d <= 1885")["weight"])
+    dev_data = lgb.Dataset(data_df.query(f"{1913 - 365*year} <= d and d <= 1885").drop(drop_col, axis=1), label=data_df.query(f"{1913 - 365*year} <= d and d <= {1913}")["target"])#, weight=data_df.query("d <= 1885")["weight"])
     val_data = lgb.Dataset(val_data_df.drop(drop_col, axis=1), label=val_data_df["target"])#, weight=val_data_df["weight"])
     val_data_2 = lgb.Dataset(val_data_df2.drop(drop_col, axis=1), label=val_data_df2["target"])
     val_data.duration = "val"
     val_data_2.duration = "test"
 
-    hierarchicalMSE = HierarchicalMSE(data_df.query(f"{1885 - 365*year} <= d and d <= {1885} and target>=0"), data_df.query(f"{1885 - 365*year} <= d and d <= {1885} and target>=0")["target"].values, True)
+    hierarchicalMSE = HierarchicalMSE(data_df.query(f"{1913 - 365*year} <= d and d <= {1913} and target>=0"), data_df.query(f"{1913 - 365*year} <= d and d <= {1913} and target>=0")["target"].values, True)
 
     raw_train_df = pd.read_csv('../input/m5-forecasting-accuracy/sales_train_validation.csv')
     calendar = pd.read_csv("../input/m5-forecasting-accuracy/calendar.csv")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     history = {}
     clf = lgb.train(param, dev_data, num_round, valid_sets = [val_data, val_data_2], verbose_eval=1, early_stopping_rounds = 200, feval=evaluator.feval, fobj=hierarchicalMSE.calc, evals_result=history)
     clf.save_model(f"{modelname}.model")
-    pd.DataFrame(history).to_csv(f"modelname_history.csv", index=None)
+    pd.DataFrame(history).to_csv(f"{modelname}_history.csv", index=None)
 
     raw_train_res = pd.read_csv('../input/m5-forecasting-accuracy/sales_train_evaluation.csv')
     idmap = {v:i for i, v in enumerate(raw_train_res["id"])}
@@ -106,3 +106,5 @@ if __name__ == "__main__":
     test_res["pred"] = clf.predict(test_data_df.drop(drop_col, axis=1), num_iteration=clf.best_iteration)
     test_res.to_csv(f"{modelname}_test.csv", index=None)
 
+    pd.DataFrame(evaluator_val.history).to_csv(f"{modelname}_history_spec_val.csv", index=None)
+    pd.DataFrame(evaluator_test.history).to_csv(f"{modelname}_history_spec_test.csv", index=None)
