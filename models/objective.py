@@ -84,7 +84,7 @@ class HierarchicalMSE():
         return ((pred_agg - true_agg)*balance*weight).values
     
     def calc(self, y_pred, data):
-        self.df["pred"] = y_pred + 1e-12
+        self.df["pred"] = np.maximum(y_pred, 1e-12)
         
         if (self.n_iter < 200):
             grad = Parallel(n_jobs=12, backend="threading")([delayed(self.partial_loss2)(inp) for inp in self.iter_inputs(y_pred)])
