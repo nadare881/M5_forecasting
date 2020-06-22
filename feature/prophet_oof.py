@@ -26,7 +26,7 @@ logging.getLogger('fbprophet').setLevel(logging.WARNING)
 
 Feature.dir = "../processed"
 
-LAG = 14
+LAG = 7
 class Prophet_id_oof(Feature):
     def create_features(self):
         data_df = pd.read_pickle("../processed/base_data.pickle")

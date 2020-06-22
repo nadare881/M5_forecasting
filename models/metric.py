@@ -171,9 +171,29 @@ class Evaluator():
     def __init__(self, val, test):
         self.val = val
         self.test = test
+        self.dummy_loss = 1
+        
+    def poisson(self, preds, dtrain):
+        true = dtrain.get_label()
+        score = np.mean(preds - true*np.log(np.maximum(1e-12, preds)))
+        return 'poisson', score, False
+
+    def rmse(self, preds, dtrain):
+        true = dtrain.get_label()
+        score = np.sqrt(mean_squared_error(true, preds))
+        return "rmse", score, False
     
     def feval(self, preds, dtrain):
-        if dtrain.duration == "val":
+        if dtrain.duration == "fake":
+            _, score, _ = self.poisson(preds, dtrain)
+            self.test.history["rmse"].append(score)
+            _, score, _ = self.rmse(preds, dtrain)
+            self.test.history["poisson"].append(score)
+            self.dummy_loss -= 1e-5
+            return "dummy", self.dummy_loss, False
+        elif dtrain.duration == "val":
             return self.val.feval(preds, dtrain)
-        else:
+        elif dtrain.duration == "test":
             return self.test.feval(preds, dtrain)
+        else:
+            raise NotImplementedError

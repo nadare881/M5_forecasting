@@ -13,12 +13,13 @@ warnings.simplefilter('ignore')
 from objective import HierarchicalMSE
 from metric import WRMSSEEvaluator, WRMSSEForLightGBM, Evaluator
 
+modelname = "hoge"
+LAG = 28
+train_end = 1913
+
 def load_datasets(feats):
     dfs = [pd.read_pickle(f'../processed/{f}_data.ftr') for f in feats]
     return pd.concat(dfs, axis=1)
-
-modelname = "hoge"
-LAG = 14
 
 if __name__ == "__main__":
     data_df = pd.read_pickle("../processed/base_data.pickle")
@@ -28,20 +29,21 @@ if __name__ == "__main__":
 
     drop_col = ["target", "d", "id", "next_change", "rchange_rate"]
 
-    test_data_df = data_df.query(f"{1913} < d and d <= {1913+28}")
-    val_data_df = data_df.query(f"{1913-28} < d and d <= {1913}")
+    val_data_df = data_df.query(f"{1913} < d and d <= {1941}")
     val_data_df["target"] = val_data_df["target"].fillna(0)
-    val_data_df2 = data_df.query(f"{1913} < d and d <= {1941}")
-    val_data_df2["target"] = val_data_df2["target"].fillna(0)
 
     year = 6
-    dev_data = lgb.Dataset(data_df.query(f"{1913 - 365*year} <= d and d <= 1885").drop(drop_col, axis=1), label=data_df.query(f"{1913 - 365*year} <= d and d <= {1913}")["target"])#, weight=data_df.query("d <= 1885")["weight"])
-    val_data = lgb.Dataset(val_data_df.drop(drop_col, axis=1), label=val_data_df["target"])#, weight=val_data_df["weight"])
-    val_data_2 = lgb.Dataset(val_data_df2.drop(drop_col, axis=1), label=val_data_df2["target"])
-    val_data.duration = "val"
-    val_data_2.duration = "test"
+    dev_data = lgb.Dataset(data_df.query(f"{train_end - 365*year} <= d and d <= {train_end}").drop(drop_col, axis=1), label=data_df.query(f"{train_end - 365*year} <= d and d <= {train_end}")["target"])
+    val_data = lgb.Dataset(val_data_df.drop(drop_col, axis=1), label=val_data_df["target"])
+    dev_index = data_df[["d"]].query(f"{train_end - 365*year} <= d and d <= {train_end}").index
+    fake_val_index = np.random.choice(dev_index, 1000000)
+    fake_val_df = data_df.iloc[fake_val_index]
+    fake_val_data = lgb.Dataset(fake_val_df.drop(drop_col, axis=1), label=fake_val_df["target"])
 
-    hierarchicalMSE = HierarchicalMSE(data_df.query(f"{1913 - 365*year} <= d and d <= {1913} and target>=0"), data_df.query(f"{1913 - 365*year} <= d and d <= {1913} and target>=0")["target"].values, True)
+    val_data.duration = "test"
+    fake_val_data.duration = "fake"
+
+    hierarchicalMSE = HierarchicalMSE(data_df.query(f"{train_end - 365*year} <= d and d <= {train_end} and target>=0"), data_df.query(f"{train_end - 365*year} <= d and d <= {train_end} and target>=0")["target"].values, True)
 
     raw_train_df = pd.read_csv('../input/m5-forecasting-accuracy/sales_train_validation.csv')
     calendar = pd.read_csv("../input/m5-forecasting-accuracy/calendar.csv")
@@ -78,7 +80,7 @@ if __name__ == "__main__":
 
     num_round = 10000
     history = {}
-    clf = lgb.train(param, dev_data, num_round, valid_sets = [val_data, val_data_2], verbose_eval=1, early_stopping_rounds = 200, feval=evaluator.feval, fobj=hierarchicalMSE.calc, evals_result=history)
+    clf = lgb.train(param, dev_data, num_round, valid_sets = [val_data, fake_val_data], verbose_eval=1, early_stopping_rounds = 200, feval=evaluator.feval, fobj=hierarchicalMSE.calc, evals_result=history)
     clf.save_model(f"{modelname}.model")
     pd.DataFrame(history).to_csv(f"{modelname}_history.csv", index=None)
 
@@ -94,17 +96,6 @@ if __name__ == "__main__":
     val_res["state_id"] = val_res["id"].map(lambda x: "_".join(x.split("_")[3:4]))
     val_res["store_id"] = val_res["id"].map(lambda x: "_".join(x.split("_")[3:5]))
     val_res["pred"] = clf.predict(val_data_df.drop(drop_col, axis=1), num_iteration=clf.best_iteration)
-    val_res.to_csv(f"{modelname}_val.csv", index=None)
+    val_res.to_csv(f"{modelname}_test.csv", index=None)
 
-    test_res = val_data_df2[["id", "target", "d"]]
-    test_res["id"] = test_res["id"].map(idrmap)
-    test_res["cat_id"] = test_res["id"].map(lambda x: "_".join(x.split("_")[0:1]))
-    test_res["dept_id"] = test_res["id"].map(lambda x: "_".join(x.split("_")[0:2]))
-    test_res["item_id"] = test_res["id"].map(lambda x: "_".join(x.split("_")[0:3]))
-    test_res["state_id"] = test_res["id"].map(lambda x: "_".join(x.split("_")[3:4]))
-    test_res["store_id"] = test_res["id"].map(lambda x: "_".join(x.split("_")[3:5]))
-    test_res["pred"] = clf.predict(test_data_df.drop(drop_col, axis=1), num_iteration=clf.best_iteration)
-    test_res.to_csv(f"{modelname}_test.csv", index=None)
-
-    pd.DataFrame(evaluator_val.history).to_csv(f"{modelname}_history_spec_val.csv", index=None)
-    pd.DataFrame(evaluator_test.history).to_csv(f"{modelname}_history_spec_test.csv", index=None)
+    pd.DataFrame(evaluator.test.history).to_csv(f"{modelname}_history_spec_test.csv", index=None)

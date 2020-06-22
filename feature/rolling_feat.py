@@ -16,7 +16,7 @@ from tqdm import tqdm
 from feature import Feature, get_arguments, generate_features
 Feature.dir = "../processed"
 
-LAG = 28
+LAG = 7
 
 class Rolling_id(Feature):
     def create_features(self):
@@ -28,7 +28,12 @@ class Rolling_id(Feature):
         feat[f"id_lag_{LAG}_rmean_1"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG))
         feat[f"id_lag_{LAG+1}_rmean_1"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG+1))
         feat[f"id_lag_{LAG+2}_rmean_1"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG+2))
+
         feat[f"id_lag_{LAG}_rmean_7"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG).rolling(7).mean())
+        feat[f"id_lag_{LAG+7}_rmean_7"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG+7).rolling(7).mean())
+        feat[f"id_lag_{LAG+14}_rmean_7"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG+14).rolling(7).mean())
+        feat[f"id_lag_{LAG+21}_rmean_7"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG+21).rolling(7).mean())
+       
         feat[f"id_lag_{LAG}_rmean_28"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG).rolling(28).mean())
         feat[f"id_lag_{LAG}_rmean_63"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG).rolling(63).mean())
         feat[f"id_lag_{LAG}_rmean_91"] = data_df.groupby("id")["target"].transform(lambda x: x.shift(LAG).rolling(91).mean())
@@ -103,9 +108,11 @@ class Rolling_id(Feature):
 
             feat[f"{pf}_lag_364_rmean_7"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(364).rolling(7, center=True, min_periods=1).mean())
             feat[f"{pf}_lag_{LAG}_rmean_{1}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG))
+            feat[f"{pf}_lag_{LAG+7}_rmean_{1}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG+7))
+            feat[f"{pf}_lag_{LAG+14}_rmean_{1}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG+14))
+            feat[f"{pf}_lag_{LAG+21}_rmean_{1}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG+21))
             feat[f"{pf}_lag_{LAG}_rmean_{7}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG).rolling(7).mean())
             feat[f"{pf}_lag_{LAG}_rmean_{28}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG).rolling(28).mean())
-            feat[f"{pf}_lag_{LAG}_rmean_{91}"] = feat.groupby(id_col)["cum_scaled_target"].transform(lambda x: x.shift(LAG).rolling(91).mean())
             datas.append(data_df[id_col + ["d"]].merge(feat.drop("cum_scaled_target", axis=1),
                                                         on= id_col + ["d"],
                                                         how="left").drop(id_col + ["d"], axis=1).astype(np.float16))
