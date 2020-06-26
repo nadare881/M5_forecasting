@@ -60,23 +60,23 @@ class HierarchicalMSE():
             
     def iter_inputs(self, y_pred):
         for level, cols in enumerate(self.group_cols, start = 1):
-            yield (level, cols, self.trues[tuple(cols)], self.df["pred"].values, self.df[["d", "pred"] + list(cols)], self.weight[tuple(cols)])
+            yield (level, cols, self.trues[tuple(cols)], y_pred, self.df[["d", "pred"] + list(cols)], self.weight[tuple(cols)])
     
     def partial_loss(self, inp):
-        level, cols, true_agg, pred, pdf, weight = inp
+        level, cols, true_agg, y_pred, pdf, weight = inp
         if level == 12:
-            return (pred-true_agg)*weight
+            return (y_pred-true_agg)*weight
         else:
             pred_agg = pdf.groupby(["d",] + cols)["pred"].transform("sum")
-        balance = pred/pred_agg
+        balance = pdf["pred"]/pred_agg
         return ((pred_agg - true_agg)*balance*weight).values
     
     def partial_loss2(self, inp):
-        level, cols, true_agg, pred, pdf, weight = inp
+        level, cols, true_agg, y_pred, pdf, weight = inp
         if level == 12:
-            return (pred-true_agg)*weight
+            return (y_pred-true_agg)*weight
 
-        pdf["balance_pred"] = (self.df["target"]*10 + pred*self.n_iter) / (10 + self.n_iter)
+        pdf["balance_pred"] = (self.df["target"]*10 + pdf["pred"]*self.n_iter) / (10 + self.n_iter)
         group = pdf.groupby(["d"] + cols)
         pred_agg = group["pred"].transform("sum")
         balance_agg = group["balance_pred"].transform("sum")
@@ -86,7 +86,7 @@ class HierarchicalMSE():
     def calc(self, y_pred, data):
         self.df["pred"] = np.maximum(y_pred, 1e-12)
         
-        if (self.n_iter < 200):
+        if (self.n_iter < 100):
             grad = Parallel(n_jobs=12, backend="threading")([delayed(self.partial_loss2)(inp) for inp in self.iter_inputs(y_pred)])
         else:
             grad = Parallel(n_jobs=12, backend="threading")([delayed(self.partial_loss)(inp) for inp in self.iter_inputs(y_pred)])
